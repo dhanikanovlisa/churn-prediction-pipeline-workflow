@@ -49,8 +49,10 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.4}
-  # build: .
+  # image: docker/Dockerfile.airflow
+  build:
+    context: .
+    dockerfile: Docker/Dockerfile.airflow
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -72,11 +74,13 @@ x-airflow-common:
     # The following line can be used to set a custom config file, stored in the local config folder
     # If you want to use it, outcomment it and replace airflow.cfg with the name of your config file
     # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/src:/opt/airflow/src
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -101,19 +105,19 @@ services:
       start_period: 5s
     restart: always
 
-  # redis:
-  #   # Redis is limited to 7.2-bookworm due to licencing change
-  #   # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
-  #   image: redis:7.2-bookworm
-  #   expose:
-  #     - 6379
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 30s
-  #     retries: 50
-  #     start_period: 30s
-  #   restart: always
+#   # redis:
+#   #   # Redis is limited to 7.2-bookworm due to licencing change
+#   #   # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
+#   #   image: redis:7.2-bookworm
+#   #   expose:
+#   #     - 6379
+#   #   healthcheck:
+#   #     test: ["CMD", "redis-cli", "ping"]
+#   #     interval: 10s
+#   #     timeout: 30s
+#   #     retries: 50
+#   #     start_period: 30s
+#   #   restart: always
 
   airflow-webserver:
     <<: *airflow-common
@@ -126,6 +130,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    environment:
+      - AIRFLOW_CONN_SPARK_LOCAL=spark://spark-master:7077
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -265,24 +271,24 @@ services:
   # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
   # or by explicitly targeted on the command line e.g. docker-compose up flower.
   # # See: https://docs.docker.com/compose/profiles/
-  # flower:
-  #   <<: *airflow-common
-  #   command: celery flower
-  #   profiles:
-  #     - flower
-  #   ports:
-  #     - "5555:5555"
-  #   healthcheck:
-  #     test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 30s
-  #   restart: always
-  #   depends_on:
-  #     <<: *airflow-common-depends-on
-  #     airflow-init:
-  #       condition: service_completed_successfully
+  flower:
+    <<: *airflow-common
+    command: celery flower
+    profiles:
+      - flower
+    ports:
+      - "5555:5555"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
   mlflow-server:
     build:
       context: .
@@ -292,22 +298,51 @@ services:
     volumes:
       - mlflow-data:/mlflow
       
-  pyspark:
-    image: jupyter/pyspark-notebook:latest  # Official PySpark image
+  spark-master:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.spark
+    container_name: spark-master
     environment:
-      - PYSPARK_PYTHON=python3
-      - SPARK_HOME=/usr/local/spark
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
     ports:
-      - "4040:4040"  # Spark UI
-      - "8888:8888"  # Jupyter Notebook
+      - "7077:7077"  # Spark master port
+      - "8081:8080"  # Spark web UI port
+    networks:
+      - airflow
     volumes:
-      - ./notebooks:/home/jovyan/work  # Mount notebooks directory
-      - ./data:/data                  # Mount data directory
-    command: >
-      start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
+      - ./src:/opt/bitnami/spark/src
+      - ./data:/opt/bitnami/data
     restart: always
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.spark
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
     depends_on:
-      - postgres
+      - spark-master
+    ports:
+    - "8082:8081"
+    networks:
+      - airflow
+    volumes:
+      - ./src:/opt/bitnami/spark/src
+      - ./data:/opt/bitnami/data
+    restart: always
+  
+networks:
+  airflow:
+    driver: bridge
+
 volumes:
   mlflow-data:
   postgres-db-volume:

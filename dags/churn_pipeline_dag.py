@@ -1,55 +1,28 @@
-from datetime import datetime, timedelta
-
 from airflow import DAG
-from airflow.operators.python import PythonOperator
-
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.utils.dates import days_ago
 
 default_args = {
-    'owner': 'coder2j',
-    'retries': 5,
-    'retry_delay': timedelta(minutes=5)
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
 }
 
-
-def greet(some_dict, ti):
-    print("some dict: ", some_dict)
-    first_name = ti.xcom_pull(task_ids='get_name', key='first_name')
-    last_name = ti.xcom_pull(task_ids='get_name', key='last_name')
-    age = ti.xcom_pull(task_ids='get_age', key='age')
-    print(f"Hello World! My name is {first_name} {last_name}, "
-          f"and I am {age} years old!")
-
-
-def get_name(ti):
-    ti.xcom_push(key='first_name', value='Jerry')
-    ti.xcom_push(key='last_name', value='Fridman')
-
-
-def get_age(ti):
-    ti.xcom_push(key='age', value=19)
-
-
 with DAG(
+    dag_id='spark_submit_example',
     default_args=default_args,
-    dag_id='our_dag_with_python_operator_v07',
-    description='Our first dag using python operator',
-    start_date=datetime(2021, 10, 6),
-    schedule_interval='@daily'
+    description='Run a Spark job using SparkSubmitOperator',
+    schedule_interval=None,
+    start_date=days_ago(1),
+    catchup=False,
 ) as dag:
-    task1 = PythonOperator(
-        task_id='greet',
-        python_callable=greet,
-        op_kwargs={'some_dict': {'a': 1, 'b': 2}}
+
+    spark_submit_task = SparkSubmitOperator(
+        task_id='submit_spark_job',
+        application='/opt/airflow/src/data_preprocessing.py',  # Replace with the path to your Spark job
+        conn_id='spark_local',
     )
 
-    task2 = PythonOperator(
-        task_id='get_name',
-        python_callable=get_name
-    )
-
-    task3 = PythonOperator(
-        task_id='get_age',
-        python_callable=get_age
-    )
-
-    [task2, task3] >> task1
+    spark_submit_task
