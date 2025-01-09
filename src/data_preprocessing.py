@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
-from pyspark.ml.feature import StandardScaler, StringIndexer
+from pyspark.ml.feature import StandardScaler, StringIndexer, OneHotEncoder
 from pyspark.sql.types import IntegerType, DoubleType
 from pyspark.sql.functions import mean, stddev
 
@@ -10,7 +10,7 @@ spark = SparkSession.builder.appName('ChurnPrediction').getOrCreate()
 #Function to load and clean data
 def load_and_clean_data(file_path):
     df = spark.read.option('header', 'true').csv(file_path, inferSchema=True)
-    df = df.drop('customerID', 'gender')  # Drop irrelevant columns
+    df = df.drop('customerID')  # Drop irrelevant columns
     df = df.withColumn("TotalCharges", col("TotalCharges").cast("double"))
     df = df.dropDuplicates().na.drop()  # Remove duplicates and handle missing values
     return df
@@ -30,8 +30,13 @@ def preprocess_numerical_features(df):
 def preprocess_categorical_features(df):
     categorical_cols = [field.name for field in df.schema.fields if not field.name.endswith("_scaled") and not isinstance(field.dataType, (IntegerType, DoubleType))]
     for col_name in categorical_cols:
-        indexer = StringIndexer(inputCol=col_name, outputCol=col_name + "_indexed")
+         # StringIndexer
+        indexer = StringIndexer(inputCol=col_name, outputCol=f"{col_name}_indexed")
         df = indexer.fit(df).transform(df)
+        
+        # OneHotEncoder
+        encoder = OneHotEncoder(inputCol=f"{col_name}_indexed", outputCol=f"{col_name}_encoded")
+        df = encoder.fit(df).transform(df)
     return df
 
 #Function to balance dataset
