@@ -1,8 +1,10 @@
+from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import StandardScaler, StringIndexer, OneHotEncoder
 from pyspark.sql.types import IntegerType, DoubleType
 from pyspark.sql.functions import mean, stddev
+from sklearn.model_selection import train_test_split
 
 #Initialize Spark Sessions
 spark = SparkSession.builder.appName('ChurnPrediction').getOrCreate()
@@ -58,9 +60,18 @@ def data_processing(input_path, output_path):
     df_selected = df.select(*[col_name for col_name in df.columns if "_scaled" in col_name or "_indexed" in col_name])
     balanced_df = balance_dataset(df_selected)
     balanced_df.show(5)
-    balanced_df.toPandas().to_csv(output_path, index=False)
+    pandas_df = balanced_df.toPandas()
+    X = pandas_df.drop(columns=['Churn_indexed'])
+    y = pandas_df['Churn_indexed']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    X_train.to_csv(f"{output_path}/{timestamp}_x_train.csv", index=False)
+    y_train.to_csv(f"{output_path}/{timestamp}_y_train.csv", index=False)
+    X_test.to_csv(f"{output_path}/{timestamp}_x_test.csv", index=False)
+    y_test.to_csv(f"{output_path}/{timestamp}_y_test.csv", index=False)
     
 if __name__ == '__main__':
     input_file_path = '../data/raw/data.csv'
-    output_file_path = '../data/processed/data.csv'
+    output_file_path = '../data/processed'
     data_processing(input_file_path, output_file_path)
