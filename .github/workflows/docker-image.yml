@@ -21,17 +21,17 @@ jobs:
       # Step 3: Build and push Docker airflow image
       - name: Build and push the Docker airflow image
         run: |
-          docker build . --file Docker/Dockerfile.airflow --tag ${{ secrets.DOCKER_USERNAME }}/churn-airflow:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/churn-airflow:latest
+          docker build . --file Docker/Dockerfile.airflow --tag ${{ secrets.DOCKER_USERNAME }}/churnpipeline-airflow:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churnpipeline-airflow:latest
 
       # Step 4: Build and push Docker spark image
       - name: Build and push the Docker spark image
         run: |
-          docker build . --file Docker/Dockerfile.sprak --tag ${{ secrets.DOCKER_USERNAME }}/churn-spark:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/churn-spark:latest
+          docker build . --file Docker/Dockerfile.spark --tag ${{ secrets.DOCKER_USERNAME }}/churnpipeline-spark:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churnpipeline-spark:latest
 
       # Step 5: Build and push Docker mlflow image
       - name: Build and push the Docker mlflow image
         run: |
-          docker build . --file Docker/Dockerfile.mlflow --tag ${{ secrets.DOCKER_USERNAME }}/churn-mlflow:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/churn-mlflow:latest
+          docker build . --file Docker/Dockerfile.mlflow --tag ${{ secrets.DOCKER_USERNAME }}/churnpipeline-mlflow:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churnpipeline-mlflow:latest
