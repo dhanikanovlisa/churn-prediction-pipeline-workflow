@@ -1,0 +1,37 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the code
+      - uses: actions/checkout@v4
+
+      # Step 2: Log in to Docker Hub
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # Step 3: Build and push Docker airflow image
+      - name: Build and push the Docker airflow image
+        run: |
+          docker build . --file Docker/Dockerfile.airflow --tag ${{ secrets.DOCKER_USERNAME }}/churn-airflow:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churn-airflow:latest
+
+      # Step 4: Build and push Docker spark image
+      - name: Build and push the Docker spark image
+        run: |
+          docker build . --file Docker/Dockerfile.sprak --tag ${{ secrets.DOCKER_USERNAME }}/churn-spark:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churn-spark:latest
+
+      # Step 5: Build and push Docker mlflow image
+      - name: Build and push the Docker mlflow image
+        run: |
+          docker build . --file Docker/Dockerfile.mlflow --tag ${{ secrets.DOCKER_USERNAME }}/churn-mlflow:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/churn-mlflow:latest
