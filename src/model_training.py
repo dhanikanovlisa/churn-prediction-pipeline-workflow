@@ -1,51 +1,78 @@
+from datetime import datetime, timedelta
+
 import mlflow
-import pandas as pd
+import mlflow.pyfunc
+import mlflow.sklearn
 import numpy as np
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
+import pandas as pd
+from mlflow.models.signature import infer_signature
+from mlflow.tracking import MlflowClient
+from pyspark.ml.feature import OneHotEncoder, StandardScaler, StringIndexer
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, mean, stddev
+from pyspark.sql.types import DoubleType, IntegerType
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report
-import warnings
-warnings.filterwarnings('ignore')
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 
-X, y = make_classification(n_samples=1000, n_features=10, n_informative=2, n_redundant=8, 
-                           weights=[0.9, 0.1], flip_y=0, random_state=42)
+DATA_PROCESSED_PATH = "../../data/processed"
 
-np.unique(y, return_counts=True)
+def train_and_log_models(**kwargs):
+    timestamp = kwargs['ti'].xcom_pull(task_ids='data_processing', key='timestamp')
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, stratify=y, random_state=42)
+    X_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
+    y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
+    X_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_test.csv")
+    y_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_test.csv")
 
-# Define the model hyperparameters
-params = {
-    "solver": "lbfgs",
-    "max_iter": 1000,
-    "multi_class": "auto",
-    "random_state": 8888,
-}
+    # Model 1: Random Forest
+    rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_model.fit(X_train, y_train)
+    rf_preds = rf_model.predict(X_test)
+    rf_accuracy = accuracy_score(y_test, rf_preds)
 
-# Train the model
-lr = LogisticRegression(**params)
-lr.fit(X_train, y_train)
+    mlflow.set_experiment("Default")
+    mlflow.set_tracking_uri("http://mlflow:5000")
 
-# Predict on the test set
-y_pred = lr.predict(X_test)
+    signature = infer_signature(X_train, rf_preds)
+    with mlflow.start_run(run_name="Random_Forest"):
+        mlflow.log_param("timestamp", timestamp)
+        mlflow.sklearn.log_model(rf_model, "Random_Forest_Model", signature=signature)
+        mlflow.log_metric("accuracy", rf_accuracy)
+    
+    # Model 2: Logistic Regression
+    lr_model = LogisticRegression(max_iter=1000, random_state=42)
+    lr_model.fit(X_train, y_train)
+    lr_preds = lr_model.predict(X_test)
+    lr_accuracy = accuracy_score(y_test, lr_preds)
+    
+    signature = infer_signature(X_train, lr_preds)
+    with mlflow.start_run(run_name="Logistic_Regression"):
+        mlflow.log_param("timestamp", timestamp)
+        mlflow.sklearn.log_model(lr_model, "Logistic_Regression_Model", signature=signature)
+        mlflow.log_metric("accuracy", lr_accuracy)
+    
+    client = MlflowClient()
+    recent_runs = client.search_runs(
+        experiment_ids=["0"],
+        order_by=["start_time DESC"],
+        max_results=2
+    )
 
-report = classification_report(y_test, y_pred)
-print(report)
+    if not recent_runs:
+        raise ValueError("No runs found for this experiment.")
+    
+    best_run = max(recent_runs, key=lambda run: run.data.metrics.get('accuracy', 0))
+    
+    model_uri = f"runs:/{best_run.info.run_id}/model"
+    model_version = mlflow.register_model(model_uri, "ChurnModel")
 
-report_dict = classification_report(y_test, y_pred, output_dict=True)
-report_dict
-
-mlflow.set_experiment("Default")
-mlflow.set_tracking_uri("http://localhost:5000")
-
-with mlflow.start_run():
-    mlflow.log_params(params)
-    mlflow.log_metrics({
-        'accuracy': report_dict['accuracy'],
-        'recall_class_0': report_dict['0']['recall'],
-        'recall_class_1': report_dict['1']['recall'],
-        'f1_score_macro': report_dict['macro avg']['f1-score']
-    })
-    mlflow.sklearn.log_model(lr, "Logistic Regression") 
+    client.transition_model_version_stage(
+        name="ChurnModel",
+        version=model_version.version,
+        stage="Production"
+    )
+    
+if __name__ == "__main__":
+    train_and_log_models()

@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.utils.dates import days_ago
+from airflow.operators.bash import BashOperator
 
 default_args = {
     'owner': 'airflow',
@@ -19,10 +20,33 @@ with DAG(
     catchup=False,
 ) as dag:
 
-    spark_submit_task = SparkSubmitOperator(
+    data_preprocessing = SparkSubmitOperator(
         task_id='submit_spark_job',
-        application='/opt/airflow/src/data_preprocessing.py',  # Replace with the path to your Spark job
+        application='/src/data_preprocessing.py',  
         conn_id='spark_local',
+        application_args=[
+            "--timestamp",
+            "{{ ts }}"  # Pass the current timestamp from Airflow context
+        ],
     )
+    
+    train_model = BashOperator(
+        task_id='train_model',
+        bash_command='python3 /src/model_training.py',
+        application_args=[
+            "--timestamp",
+            "{{ ts }}"  # Pass the current timestamp from Airflow context
+        ],
+    )
+    
+    detect_drift = BashOperator(
+        task_id='detect_drift',
+        bash_command='python3 /src/drift_monitoring.py',
+        application_args=[
+            "--timestamp",
+            "{{ ts }}"  # Pass the current timestamp from Airflow context
+        ],
+    )
+    
 
-    spark_submit_task
+    data_preprocessing >> train_model >> detect_drift
