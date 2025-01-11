@@ -10,11 +10,11 @@ jobs:
     # Step 1: Checkout the repository
     - uses: actions/checkout@v4
 
-    # Step 2: Set up Python 3.9
-    - name: Set up Python 3.9
+    # Step 2: Set up Python 3.8
+    - name: Set up Python 3.8
       uses: actions/setup-python@v3
       with:
-        python-version: "3.9"
+        python-version: "3.8"
 
     # Step 3: Install dependencies excluding `apache-airflow-providers-apache-spark`
     - name: Install dependencies
