@@ -5,21 +5,15 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    # Step 1: Checkout the repository
     # Step 1: Checkout the repository
     - uses: actions/checkout@v4
 
     # Step 2: Set up Python 3.9
     - name: Set up Python 3.9
-
-    # Step 2: Set up Python 3.9
-    - name: Set up Python 3.9
       uses: actions/setup-python@v3
       with:
-        python-version: "3.9"
-
-    # Step 3: Install dependencies
         python-version: "3.9"
 
     # Step 3: Install dependencies
@@ -30,10 +24,5 @@ jobs:
 
     # Step 4: Analyze the code in the `src/` directory with Pylint
     - name: Analyze code with Pylint
-        pip install pylint
-
-    # Step 4: Analyze the code in the `src/` directory with Pylint
-    - name: Analyze code with Pylint
       run: |
-        pylint src/
         pylint src/
