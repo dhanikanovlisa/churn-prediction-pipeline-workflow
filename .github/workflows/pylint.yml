@@ -16,11 +16,11 @@ jobs:
       with:
         python-version: "3.9"
 
-    # Step 3: Install dependencies
+    # Step 3: Install dependencies excluding `apache-airflow-providers-apache-spark`
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install $(grep -v "apache-airflow-providers-apache-spark" requirements.txt)
 
     # Step 4: Analyze the code in the `src/` directory with Pylint
     - name: Analyze code with Pylint
