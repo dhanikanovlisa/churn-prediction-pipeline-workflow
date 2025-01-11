@@ -1,55 +1,61 @@
-from datetime import datetime, timedelta
-
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.utils.dates import days_ago
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
 
+def print_no_drift_message():
+    print("No model drift detected")
+
+def choose_next_task(task_instance, **kwargs):
+    drift_detected = task_instance.xcom_pull(task_ids='detect_drift')
+    return 'train_model' if drift_detected == 'True' else 'no_model_drift'
 
 default_args = {
-    'owner': 'coder2j',
-    'retries': 5,
-    'retry_delay': timedelta(minutes=5)
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
 }
 
-
-def greet(some_dict, ti):
-    print("some dict: ", some_dict)
-    first_name = ti.xcom_pull(task_ids='get_name', key='first_name')
-    last_name = ti.xcom_pull(task_ids='get_name', key='last_name')
-    age = ti.xcom_pull(task_ids='get_age', key='age')
-    print(f"Hello World! My name is {first_name} {last_name}, "
-          f"and I am {age} years old!")
-
-
-def get_name(ti):
-    ti.xcom_push(key='first_name', value='Jerry')
-    ti.xcom_push(key='last_name', value='Fridman')
-
-
-def get_age(ti):
-    ti.xcom_push(key='age', value=19)
-
-
 with DAG(
+    dag_id='spark_submit_example',
     default_args=default_args,
-    dag_id='our_dag_with_python_operator_v07',
-    description='Our first dag using python operator',
-    start_date=datetime(2021, 10, 6),
-    schedule_interval='@daily'
+    description='Run a Spark job using SparkSubmitOperator',
+    schedule_interval=None,
+    start_date=days_ago(1),
+    catchup=False,
 ) as dag:
-    task1 = PythonOperator(
-        task_id='greet',
-        python_callable=greet,
-        op_kwargs={'some_dict': {'a': 1, 'b': 2}}
+
+    data_preprocessing = SparkSubmitOperator(
+        task_id='submit_spark_job',
+        application='/src/data_preprocessing.py',  
+        conn_id='spark_local',
+    )
+    
+    train_model = BashOperator(
+        task_id='train_model',
+        bash_command='python3 /src/model_training.py',
+    )
+    
+    detect_drift = BashOperator(
+        task_id='detect_drift',
+        bash_command='python3 /src/drift_monitoring.py',
     )
 
-    task2 = PythonOperator(
-        task_id='get_name',
-        python_callable=get_name
+    no_model_drift = PythonOperator(
+        task_id='no_model_drift',
+        python_callable=print_no_drift_message
     )
 
-    task3 = PythonOperator(
-        task_id='get_age',
-        python_callable=get_age
+    branch_decision = BranchPythonOperator(
+        task_id='branch_decision',
+        python_callable=choose_next_task,
+        provide_context=True
     )
 
-    [task2, task3] >> task1
+    data_preprocessing >> detect_drift >> branch_decision
+    branch_decision >> train_model
+    branch_decision >> no_model_drift
+
