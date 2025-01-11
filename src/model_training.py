@@ -1,81 +1,86 @@
-from datetime import datetime, timedelta
-
+"""
+This script trains two models, a Random Forest and a Logistic Regression model,
+and logs them to MLflow.
+"""
 import mlflow
-import mlflow.pyfunc
 import mlflow.sklearn
-import numpy as np
-import pandas as pd
 from mlflow.models.signature import infer_signature
 from mlflow.tracking import MlflowClient
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, StringIndexer
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, mean, stddev
-from pyspark.sql.types import DoubleType, IntegerType
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
 import helpers
 
 DATA_PROCESSED_PATH = "../../data/processed"
 
-def train_and_log_models(**kwargs):
-    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
 
-    X_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
-    y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
-    X_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_test.csv")
-    y_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_test.csv")
-
-    # Model 1: Random Forest
+def log_random_forest_model(x_train, y_train, x_test, y_test, timestamp):
+    """
+    Trains and logs a Random Forest model to MLflow.
+    """
     rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf_model.fit(X_train, y_train)
-    rf_preds = rf_model.predict(X_test)
+    rf_model.fit(x_train, y_train)
+    rf_preds = rf_model.predict(x_test)
     rf_accuracy = accuracy_score(y_test, rf_preds)
 
-    mlflow.set_experiment("Default")
-    mlflow.set_tracking_uri("http://mlflow-server:5000")
-
-    signature = infer_signature(X_train, rf_preds)
+    signature = infer_signature(x_train, rf_preds)
     with mlflow.start_run(run_name="Random_Forest"):
         mlflow.log_param("timestamp", timestamp)
         mlflow.sklearn.log_model(rf_model, "Random_Forest_Model", signature=signature)
         mlflow.log_metric("accuracy", rf_accuracy)
-    
-    # Model 2: Logistic Regression
+
+    return rf_accuracy
+
+
+def log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp):
+    """
+    Trains and logs a Logistic Regression model to MLflow.
+    """
     lr_model = LogisticRegression(max_iter=1000, random_state=42)
-    lr_model.fit(X_train, y_train)
-    lr_preds = lr_model.predict(X_test)
+    lr_model.fit(x_train, y_train)
+    lr_preds = lr_model.predict(x_test)
     lr_accuracy = accuracy_score(y_test, lr_preds)
-    
-    signature = infer_signature(X_train, lr_preds)
+
+    signature = infer_signature(x_train, lr_preds)
     with mlflow.start_run(run_name="Logistic_Regression"):
         mlflow.log_param("timestamp", timestamp)
-        mlflow.sklearn.log_model(lr_model, "Logistic_Regression_Model", signature=signature)
+        mlflow.sklearn.log_model(
+            lr_model, "Logistic_Regression_Model", signature=signature
+        )
         mlflow.log_metric("accuracy", lr_accuracy)
-    
+
+    return lr_accuracy
+
+
+def train_and_log_models():
+    """
+    Main function to train and log models.
+    """
+    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
+
+    # x_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
+    # y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
+    # x_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_test.csv")
+    # y_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_test.csv")
+
+    # rf_accuracy = log_random_forest_model(x_train, y_train, x_test, y_test, timestamp)
+    # lr_accuracy = log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp)
+
     client = MlflowClient()
-    recent_runs = client.search_runs(
-        experiment_ids=["0"],
-        order_by=["start_time DESC"],
-        max_results=2
+    best_run = max(
+        client.search_runs(experiment_ids=["0"], order_by=["start_time DESC"], max_results=2),
+        key=lambda run: run.data.metrics.get("accuracy", 0),
     )
 
-    if not recent_runs:
-        raise ValueError("No runs found for this experiment.")
-    
-    best_run = max(recent_runs, key=lambda run: run.data.metrics.get('accuracy', 0))
-    
     model_uri = f"runs:/{best_run.info.run_id}/model"
     model_version = mlflow.register_model(model_uri, "ChurnModel")
 
     client.transition_model_version_stage(
-        name="ChurnModel",
-        version=model_version.version,
-        stage="Production"
+        name="ChurnModel", version=model_version.version, stage="Production"
     )
 
     helpers.save_timestamp(timestamp, helpers.MODEL_LOG_FILE)
-    
+
+
 if __name__ == "__main__":
     train_and_log_models()
