@@ -7,7 +7,7 @@ from pyspark.sql.functions import mean, stddev
 from sklearn.model_selection import train_test_split
 import helpers
 
-DATA_RAW_PATH = "../../data/raw/data.csv"
+DATA_RAW_PATH = "../../data/raw/drift.csv"
 DATA_PROCESSED_PATH = "../../data/processed"
 TIMESTAMP_FILE = "../../data/config.json"
 #Initialize Spark Sessions

@@ -2,6 +2,14 @@ from airflow import DAG
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.utils.dates import days_ago
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
+
+def print_no_drift_message():
+    print("No model drift detected")
+
+def choose_next_task(task_instance, **kwargs):
+    drift_detected = task_instance.xcom_pull(task_ids='detect_drift')
+    return 'train_model' if drift_detected == 'True' else 'no_model_drift'
 
 default_args = {
     'owner': 'airflow',
@@ -35,6 +43,19 @@ with DAG(
         task_id='detect_drift',
         bash_command='python3 /src/drift_monitoring.py',
     )
-    
 
-    data_preprocessing >> train_model >> detect_drift
+    no_model_drift = PythonOperator(
+        task_id='no_model_drift',
+        python_callable=print_no_drift_message
+    )
+
+    branch_decision = BranchPythonOperator(
+        task_id='branch_decision',
+        python_callable=choose_next_task,
+        provide_context=True
+    )
+
+    data_preprocessing >> detect_drift >> branch_decision
+    branch_decision >> train_model
+    branch_decision >> no_model_drift
+

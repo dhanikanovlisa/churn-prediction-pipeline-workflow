@@ -30,33 +30,40 @@ def calculate_psi(training_series, new_series, bins=10):
     
     return psi_total
 
+def merge_datasets(timestamp, processed_path):
+    x_train = pd.read_csv(f"{processed_path}/{timestamp}_x_train.csv")
+    x_test = pd.read_csv(f"{processed_path}/{timestamp}_x_test.csv")
+
+    df_new = pd.concat([x_train, x_test], ignore_index=True)
+    return df_new
 
 def detect_model_drift(**kwargs):
-    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
     timestamp_model = helpers.get_last_timestamp(helpers.MODEL_LOG_FILE)
-    try:
-        df_train = pd.read_csv(f"data/processed/{timestamp_model}_x_train.csv")
-        df_new = pd.read_csv(f"data/processed/{timestamp}_x_train.csv")
 
-        features_to_check = [col for col in df_train.columns]
-        significant_drift = False
-        psi_threshold = 0.25
+    if not timestamp_model:
+        print('True')
+        return
+    
+    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
+    df_train = merge_datasets(timestamp_model, "../../data/processed" )
+    df_new = merge_datasets(timestamp, "../../data/processed" )
 
-        for feature in features_to_check:
-            psi_value = calculate_psi(df_train[feature], df_new[feature])
-            print(psi_value)
-            if psi_value > psi_threshold:
-                print(f"Significant drift detected in feature {feature} with PSI: {psi_value}")
-                significant_drift = True
-                break
-        
-        if significant_drift:
-            return True
-        else:
-            return False
-    except Exception as e:
-        print(f"Error in detecting data drift: {str(e)}")
-        return False
+    features_to_check = [col for col in df_train.columns]
+    significant_drift = False
+    psi_threshold = 0.25
+    for feature in features_to_check:
+        psi_value = calculate_psi(df_train[feature], df_new[feature])
+        print(psi_value)
+        if psi_value > psi_threshold:
+            print(f"Significant drift detected in feature {feature} with PSI: {psi_value}")
+            significant_drift = True
+            break
+    
+    if significant_drift:
+        print('True')
+    else:
+        print('False')
+
     
 if __name__ == "__main__":
     detect_model_drift()
