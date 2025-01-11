@@ -15,11 +15,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+import helpers
 
 DATA_PROCESSED_PATH = "../../data/processed"
 
 def train_and_log_models(**kwargs):
-    timestamp = kwargs['ti'].xcom_pull(task_ids='data_processing', key='timestamp')
+    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
 
     X_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
     y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
@@ -33,7 +34,7 @@ def train_and_log_models(**kwargs):
     rf_accuracy = accuracy_score(y_test, rf_preds)
 
     mlflow.set_experiment("Default")
-    mlflow.set_tracking_uri("http://mlflow:5000")
+    mlflow.set_tracking_uri("http://mlflow-server:5000")
 
     signature = infer_signature(X_train, rf_preds)
     with mlflow.start_run(run_name="Random_Forest"):
@@ -73,6 +74,8 @@ def train_and_log_models(**kwargs):
         version=model_version.version,
         stage="Production"
     )
+
+    helpers.save_timestamp(timestamp, helpers.MODEL_LOG_FILE)
     
 if __name__ == "__main__":
     train_and_log_models()

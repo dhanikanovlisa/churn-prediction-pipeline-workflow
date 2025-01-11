@@ -5,6 +5,8 @@ from pyspark.ml.feature import StandardScaler, StringIndexer, OneHotEncoder
 from pyspark.sql.types import IntegerType, DoubleType
 from pyspark.sql.functions import mean, stddev
 from sklearn.model_selection import train_test_split
+import helpers
+
 DATA_RAW_PATH = "../../data/raw/data.csv"
 DATA_PROCESSED_PATH = "../../data/processed"
 TIMESTAMP_FILE = "../../data/config.json"
@@ -54,6 +56,7 @@ def balance_dataset(df):
     balanced_df = major_df.unionAll(oversampled_minor_df)
     return balanced_df
 
+
 # Main processing function
 def data_processing(**kwargs):
     df = load_and_clean_data(DATA_RAW_PATH)
@@ -67,7 +70,7 @@ def data_processing(**kwargs):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    kwargs['ti'].xcom_push(key='timestamp', value=timestamp)
+    helpers.save_timestamp(timestamp, helpers.TIMESTAMP_FILE)
     
     X_train.to_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv", index=False)
     y_train.to_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv", index=False)

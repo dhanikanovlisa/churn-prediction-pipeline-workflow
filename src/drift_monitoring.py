@@ -15,6 +15,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+import helpers
 
 def calculate_psi(training_series, new_series, bins=10):
     bin_edges = np.linspace(min(training_series), max(training_series), bins + 1)
@@ -31,10 +32,11 @@ def calculate_psi(training_series, new_series, bins=10):
 
 
 def detect_model_drift(**kwargs):
-    timestamp = kwargs['ti'].xcom_pull(task_ids='data_processing', key='timestamp')
+    timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
+    timestamp_model = helpers.get_last_timestamp(helpers.MODEL_LOG_FILE)
     try:
-        df_train = pd.read_csv(f"data/processed/{timestamp}_x_train.csv")
-        df_new = pd.read_csv(f"data/processed/{timestamp}_y_train.csv")
+        df_train = pd.read_csv(f"data/processed/{timestamp_model}_x_train.csv")
+        df_new = pd.read_csv(f"data/processed/{timestamp}_x_train.csv")
 
         features_to_check = [col for col in df_train.columns]
         significant_drift = False
