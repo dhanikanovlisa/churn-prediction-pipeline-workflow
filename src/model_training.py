@@ -67,6 +67,15 @@ def train_and_log_models():
     # lr_accuracy = log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp)
 
     client = MlflowClient()
+    recent_runs = client.search_runs(
+        experiment_ids=["0"],
+        order_by=["start_time DESC"],
+        max_results=2
+    )
+
+    if not recent_runs:
+        raise ValueError("No runs found for this experiment.")
+    
     best_run = max(
         client.search_runs(experiment_ids=["0"], order_by=["start_time DESC"], max_results=2),
         key=lambda run: run.data.metrics.get("accuracy", 0),
