@@ -23,9 +23,9 @@ default_args = {
 }
 
 with DAG(
-    dag_id="spark_submit_example",
+    dag_id="churn_pipeline_dag",
     default_args=default_args,
-    description="Run a Spark job using SparkSubmitOperator",
+    description="Running preprocessing and training model for churn customer",
     schedule_interval=None,
     start_date=days_ago(1),
     catchup=False,

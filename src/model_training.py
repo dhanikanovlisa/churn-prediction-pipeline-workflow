@@ -2,8 +2,10 @@
 This script trains two models, a Random Forest and a Logistic Regression model,
 and logs them to MLflow.
 """
+
 import mlflow
 import mlflow.sklearn
+import pandas as pd
 from mlflow.models.signature import infer_signature
 from mlflow.tracking import MlflowClient
 from sklearn.ensemble import RandomForestClassifier
@@ -29,8 +31,6 @@ def log_random_forest_model(x_train, y_train, x_test, y_test, timestamp):
         mlflow.sklearn.log_model(rf_model, "Random_Forest_Model", signature=signature)
         mlflow.log_metric("accuracy", rf_accuracy)
 
-    return rf_accuracy
-
 
 def log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp):
     """
@@ -49,26 +49,35 @@ def log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp):
         )
         mlflow.log_metric("accuracy", lr_accuracy)
 
-    return lr_accuracy
-
 
 def train_and_log_models():
     """
     Main function to train and log models.
     """
     timestamp = helpers.get_last_timestamp(helpers.TIMESTAMP_FILE)
+    mlflow.set_experiment("Default")
+    mlflow.set_tracking_uri("http://mlflow-server:5000")
 
-    # x_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
-    # y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
-    # x_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_test.csv")
-    # y_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_test.csv")
+    x_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_train.csv")
+    y_train = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_train.csv")
+    x_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_x_test.csv")
+    y_test = pd.read_csv(f"{DATA_PROCESSED_PATH}/{timestamp}_y_test.csv")
 
-    # rf_accuracy = log_random_forest_model(x_train, y_train, x_test, y_test, timestamp)
-    # lr_accuracy = log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp)
+    log_random_forest_model(x_train, y_train, x_test, y_test, timestamp)
+    log_logistic_regression_model(x_train, y_train, x_test, y_test, timestamp)
 
     client = MlflowClient()
+    recent_runs = client.search_runs(
+        experiment_ids=["0"], order_by=["start_time DESC"], max_results=2
+    )
+
+    if not recent_runs:
+        raise ValueError("No runs found for this experiment.")
+
     best_run = max(
-        client.search_runs(experiment_ids=["0"], order_by=["start_time DESC"], max_results=2),
+        client.search_runs(
+            experiment_ids=["0"], order_by=["start_time DESC"], max_results=2
+        ),
         key=lambda run: run.data.metrics.get("accuracy", 0),
     )
 
